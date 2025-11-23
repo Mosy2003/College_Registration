@@ -1,0 +1,117 @@
+package GUIS;
+
+import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import java.awt.*;
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
+
+public class Step3_InMemoryStoreSession extends JFrame {
+    // --- domain ---
+    static final class Student {
+        final String studentId, name, email, phone;
+        final UUID sessionId; final LocalDateTime createdAt = LocalDateTime.now();
+        Student(String sid, String name, String email, String phone, UUID sess){
+            this.studentId=sid; this.name=name; this.email=email; this.phone=phone; this.sessionId=sess;
+        }
+    }
+    static final class Store {
+        private final Map<String, Student> byId = new ConcurrentHashMap<>();
+        synchronized boolean isUnique(String sid){ return sid!=null && !byId.containsKey(sid.trim()); }
+        synchronized void save(Student s){
+            if(s.studentId==null || s.studentId.isBlank()) throw new IllegalArgumentException("Student ID required.");
+            if(!isUnique(s.studentId)) throw new IllegalArgumentException("Student ID already exists.");
+            byId.put(s.studentId.trim(), s);
+        }
+    }
+
+    private final Store store = new Store();
+    private UUID sessionId = UUID.randomUUID();
+
+    // --- UI + validation ---
+    private final JTextField nameField = new JTextField();
+    private final JTextField emailField = new JTextField();
+    private final JTextField studentIdField = new JTextField();
+    private final JTextField phoneField = new JTextField();
+    private final JLabel status = new JLabel(" ");
+    private final JLabel sessionLabel = new JLabel();
+    private final JButton nextBtn = new JButton("Save");
+
+    private static final Pattern EMAIL_RX = Pattern.compile(
+            "^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$", Pattern.CASE_INSENSITIVE);
+
+    public Step3_InMemoryStoreSession(){
+        super("Step 3 — Session + In-Memory Store (Unique Student ID)");
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setSize(600, 340);
+        setLocationRelativeTo(null);
+
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT,8,8));
+        top.add(new JLabel("Session:"));
+        sessionLabel.setText(sessionId.toString());
+        sessionLabel.setFont(sessionLabel.getFont().deriveFont(Font.BOLD));
+        top.add(sessionLabel);
+
+        JPanel form = new JPanel(new GridBagLayout());
+        GridBagConstraints c = new GridBagConstraints();
+        c.insets=new Insets(6,6,6,6); c.fill=GridBagConstraints.HORIZONTAL; int row=0;
+        addRow(form,c,row++,"Name *",nameField);
+        addRow(form,c,row++,"Email *",emailField);
+        addRow(form,c,row++,"Student ID *",studentIdField);
+        addRow(form,c,row++,"Phone *",phoneField);
+
+        JPanel south = new JPanel(new BorderLayout());
+        status.setBorder(BorderFactory.createEmptyBorder(0,8,0,0));
+        south.add(status, BorderLayout.CENTER);
+        JPanel btns = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btns.add(nextBtn);
+        south.add(btns, BorderLayout.EAST);
+
+        setLayout(new BorderLayout());
+        add(top,BorderLayout.NORTH);
+        add(form,BorderLayout.CENTER);
+        add(south,BorderLayout.SOUTH);
+
+        DocumentListener dl = new DocumentListener(){ public void insertUpdate(DocumentEvent e){v();}
+            public void removeUpdate(DocumentEvent e){v();} public void changedUpdate(DocumentEvent e){v();}};
+        nameField.getDocument().addDocumentListener(dl);
+        emailField.getDocument().addDocumentListener(dl);
+        studentIdField.getDocument().addDocumentListener(dl);
+        phoneField.getDocument().addDocumentListener(dl);
+        v();
+
+        nextBtn.addActionListener(e -> {
+            try{
+                Student s = new Student(studentIdField.getText().trim(),
+                        nameField.getText().trim(), emailField.getText().trim(),
+                        phoneField.getText().trim(), sessionId);
+                store.save(s);
+                JOptionPane.showMessageDialog(this, "Saved & linked to session:\n" +
+                        "Session="+s.sessionId+"\nStudentID="+s.studentId+"\nName="+s.name+"\nEmail="+s.email);
+            }catch(Exception ex){
+                JOptionPane.showMessageDialog(this, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+    }
+
+    private void v(){
+        if(blank(nameField)) {set(false,"Name required"); return;}
+        if(!EMAIL_RX.matcher(emailField.getText().trim()).matches()){set(false,"Valid email required"); return;}
+        if(blank(studentIdField)) {set(false,"Student ID required"); return;}
+        if(!store.isUnique(studentIdField.getText().trim())) {set(false,"Student ID already exists"); return;}
+        if(blank(phoneField)) {set(false,"Phone required"); return;}
+        set(true,"All good."); 
+    }
+    private boolean blank(JTextField tf){return tf.getText()==null || tf.getText().trim().isEmpty();}
+    private void set(boolean ok,String msg){ nextBtn.setEnabled(ok); status.setText(msg); }
+    private void addRow(JPanel p, GridBagConstraints c, int row, String label, JComponent field){
+        c.gridx=0;c.gridy=row;c.weightx=0;p.add(new JLabel(label),c);
+        c.gridx=1;c.weightx=1; if(field instanceof JTextField tf) tf.setColumns(22); p.add(field,c);
+    }
+
+    public static void main(String[] args){ SwingUtilities.invokeLater(() -> new Step3_InMemoryStoreSession().setVisible(true)); }
+}
